@@ -24,7 +24,7 @@ provider "aws" {
 
 resource "aws_cloudwatch_event_rule" "lambda_summarizer_bot_schedule" {
   name                = "${local.resource_name_prefix}-lambda-summarizer-bot-schedule"
-  schedule_expression = "cron(0 07 * * ? *)" # Runs at 5 PM UTC every day
+  schedule_expression = "cron(0 20 ? * SUN *)" # Runs at 8 PM UTC every Sunday
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {
@@ -36,7 +36,7 @@ resource "aws_cloudwatch_event_target" "lambda_target" {
 {
   "source_channel_ids": ${jsonencode(var.source_channel_ids)},
   "target_channel_ids": ${jsonencode(var.target_channel_ids)},
-  "timeframe": "1 day"
+  "timeframe": "7 day"
 }
 EOF
 }
