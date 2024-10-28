@@ -42,7 +42,7 @@ pa *FLAGS:
     #!/usr/bin/env bash
     set -euxo pipefail
     just plan {{ FLAGS }}
-    just apply {{ FLAGS }}
+    just apply --auto-approve {{ FLAGS }}
 
 [group('deployment-all')]
 plan *FLAGS:
