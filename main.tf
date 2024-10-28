@@ -24,13 +24,21 @@ provider "aws" {
 
 resource "aws_cloudwatch_event_rule" "lambda_summarizer_bot_schedule" {
   name                = "${local.resource_name_prefix}-lambda-summarizer-bot-schedule"
-  schedule_expression = "cron(0 17 * * ? *)" # Runs at 5 PM UTC every day
+  schedule_expression = "cron(0 07 * * ? *)" # Runs at 5 PM UTC every day
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {
   rule      = aws_cloudwatch_event_rule.lambda_summarizer_bot_schedule.name
   target_id = "${local.resource_name_prefix}-lambda-summarizer-bot-target"
   arn       = aws_lambda_function.summarizer_bot.arn
+
+  input = <<EOF
+{
+  "source_channel_ids": ${jsonencode(var.source_channel_ids)},
+  "target_channel_ids": ${jsonencode(var.target_channel_ids)},
+  "timeframe": "1 day"
+}
+EOF
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch" {

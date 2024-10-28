@@ -1,11 +1,12 @@
 import { Client, GatewayIntentBits, TextChannel } from 'discord.js';
 import OpenAI from 'openai';
 import { Context, Handler } from 'aws-lambda';
+import parseDuration from 'parse-duration';
 
 interface InputEvent {
-  source_channel_id: string;
-  target_channel_id: string;
-  timeframe?: number;
+  source_channel_ids: string[];
+  target_channel_ids?: string[];
+  timeframe?: string;
 }
 
 const discordToken = process.env.DISCORD_BOT_TOKEN!;
@@ -31,12 +32,18 @@ client.once('ready', () => {
 });
 client.login(discordToken).catch(console.error);
 
-async function summarizeMessages(channelId: string, timeframeInDays: number = 1): Promise<string> {
+async function fetchMessages(channelId: string, timeframe: string = '1 day'): Promise<string> {
   const channel = await client.channels.fetch(channelId) as TextChannel;
   const now = new Date();
-  const pastTime = new Date(now.getTime() - timeframeInDays * 24 * 60 * 60 * 1000);
 
-  const messages = await channel.messages.fetch({ limit: 1000 });
+  const durationMs = parseDuration(timeframe);
+  if (!durationMs) {
+    throw new Error(`Invalid timeframe: ${timeframe}`);
+  }
+
+  const pastTime = new Date(now.getTime() - durationMs);
+
+  const messages = await channel.messages.fetch({ limit: 100 });
   console.log("Fetched messages:", messages.size);
 
   const filteredMessages = messages.filter(msg => msg.createdAt >= pastTime);
@@ -47,15 +54,8 @@ async function summarizeMessages(channelId: string, timeframeInDays: number = 1)
   }
 
   const messagesToSummarize = filteredMessages.map(msg => `${msg.author.username}: ${msg.content}`).join('\n');
-  console.log("Content:", messagesToSummarize);
 
-  const summary = await getSummary(messagesToSummarize);
-  console.log("Summary:", summary);
-
-  if (summary.length >= 2000) {
-    throw new Error("Summary is too long.");
-  }
-  return summary;
+  return messagesToSummarize;
 }
 
 async function getSummary(textToSummarize: string): Promise<string> {
@@ -123,9 +123,9 @@ Begin your response with your analysis in <analysis> tags, followed by the final
 export const handler: Handler<InputEvent, string> = async (event: InputEvent): Promise<string> => {
   console.log("Event:", event);
 
-  const sourceChannelId = event.source_channel_id;
-  const targetChannelId = event.target_channel_id;
-  const timeframe = event.timeframe || 1;
+  const sourceChannelIds = event.source_channel_ids;
+  const targetChannelIds = event.target_channel_ids || sourceChannelIds;
+  const timeframe = event.timeframe;
 
   if (!isClientReady) {
     await new Promise((resolve, reject) => {
@@ -135,14 +135,27 @@ export const handler: Handler<InputEvent, string> = async (event: InputEvent): P
   }
 
   try {
-    const sourceChannel = await client.channels.fetch(sourceChannelId) as TextChannel;
-    const summary = await summarizeMessages(sourceChannel, timeframe);
+    for (let i = 0; i < sourceChannelIds.length; i++) {
+      const sourceChannelId = sourceChannelIds[i];
+      const targetChannelId = targetChannelIds[i];
 
-    const targetChannel = await client.channels.fetch(targetChannelId) as TextChannel;
-    await targetChannel.send(summary);
+      const messagesToSummarize = await fetchMessages(sourceChannelId, timeframe);
+      console.log("messagesToSummarize:", messagesToSummarize);
 
-    console.log("Summary sent to the channel.");
-    return 'Summary sent to the channel.';
+      const summary = await getSummary(messagesToSummarize);
+      console.log("Summary:", summary);
+    
+      if (summary.length >= 2000) {
+        throw new Error("Summary is too long.");
+      }
+
+      const targetChannel = await client.channels.fetch(targetChannelId) as TextChannel;
+      await targetChannel.send(summary);
+
+      console.log("Summary sent to the channel.", sourceChannelId, targetChannelId, summary);
+    }
+
+    return 'Summary sent to the channels.';
   } catch (error) {
     console.error("Handler error:", error);
     throw new Error('Failed to summarize messages.');

@@ -28,3 +28,14 @@ variable "resource_name_prefix" {
   description = "Resource name prefix"
   type        = string
 }
+
+variable "source_channel_ids" {
+  description = "Source channel IDs"
+  type        = list(string)
+}
+
+variable "target_channel_ids" {
+  description = "Target channel IDs"
+  type        = list(string)
+  default     = null
+}
