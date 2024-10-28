@@ -33,7 +33,7 @@ resource "aws_lambda_function" "summarizer_bot" {
 
   filename         = data.archive_file.archiver_lambda_summarizer_bot.output_path
   source_code_hash = data.archive_file.archiver_lambda_summarizer_bot.output_base64sha256
-  timeout          = 20
+  timeout          = 180
 
   environment {
     variables = {

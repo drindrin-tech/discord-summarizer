@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, TextChannel } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, TextChannel } from 'discord.js';
 import OpenAI from 'openai';
 import { Context, Handler } from 'aws-lambda';
 import parseDuration from 'parse-duration';
@@ -42,18 +42,43 @@ async function fetchMessages(channelId: string, timeframe: string = '1 day'): Pr
   }
 
   const pastTime = new Date(now.getTime() - durationMs);
+  let lastMessageId: string | undefined = undefined;
+  let allMessages = new Collection<string, Message>();
 
-  const messages = await channel.messages.fetch({ limit: 100 });
-  console.log("Fetched messages:", messages.size);
+  while (true) {
+    const options: { limit: number; before?: string } = { limit: 100 };
+    if (lastMessageId) {
+      options.before = lastMessageId;
+    }
 
-  const filteredMessages = messages.filter(msg => msg.createdAt >= pastTime);
-  console.log("Filtered messages:", filteredMessages.size);
+    const fetchedMessages = await channel.messages.fetch(options);
+    if (fetchedMessages.size === 0) {
+      break; 
+    }
 
-  if (filteredMessages.size === 0) {
+    console.log(`Fetched ${fetchedMessages.size} messages`);
+
+    const recentMessages = fetchedMessages.filter(msg => msg.createdAt >= pastTime);
+    allMessages = allMessages.concat(recentMessages);
+
+    console.log(`Total collected messages: ${allMessages.size}`);
+
+    const oldestMessage = fetchedMessages.last();
+    if (!oldestMessage || oldestMessage.createdAt < pastTime) {
+      break;
+    }
+
+    lastMessageId = fetchedMessages.last()?.id;
+  }
+
+  if (allMessages.size === 0) {
     return "**No messages to summarize.**";
   }
 
-  const messagesToSummarize = filteredMessages.map(msg => `${msg.author.username}: ${msg.content}`).join('\n');
+  // Sort messages by creation time (optional, since Discord fetches are in descending order)
+  const sortedMessages = allMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  const messagesToSummarize = sortedMessages.map(msg => `${msg.author.username}: ${msg.content}`).join('\n');
 
   return messagesToSummarize;
 }
